@@ -13,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="expanded" 
 )
 
-# 2. CUSTOM CSS (Jurus Rata Tengah, Sejajar & Sidebar Lock)
+# 2. CUSTOM CSS (Full Dark Mode, Sejajar & Sidebar Lock)
 st.markdown("""
     <style>
     .stApp {
@@ -33,13 +33,13 @@ st.markdown("""
         text-align: center;
     }
     .header-row h1 {
-        font-size: 48px !important;
+        font-size: 45px !important;
         font-weight: 850 !important;
         color: #60A5FA !important;
         margin: 0 !important;
     }
     .header-row h2 {
-        font-size: 22px !important;
+        font-size: 20px !important;
         font-weight: 400 !important;
         color: #CBD5E1 !important;
         margin: 0 !important;
@@ -51,7 +51,7 @@ st.markdown("""
         display: none !important;
     }
 
-    /* Kontainer Tengah */
+    /* Container Tengah */
     [data-testid="stAppViewBlockContainer"] {
         max-width: 1200px !important;
         margin: auto !important;
@@ -63,6 +63,11 @@ st.markdown("""
         border-radius: 20px;
         border: 2px solid #3B82F6;
         text-align: center;
+        min-height: 280px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -87,7 +92,7 @@ if uploaded_file:
             excel_file = pd.ExcelFile(uploaded_file)
             sheet_names = excel_file.sheet_names
             
-            # Jika ada banyak sheet, tampilkan pilihan di area utama (Karena sidebar ngumpet)
+            # Jika ada banyak sheet, tampilkan pilihan di area utama
             if len(sheet_names) > 1:
                 st.markdown("### 📂 Pilih Halaman Data")
                 selected_sheet = st.selectbox("Laporan ini punya beberapa halaman. Pilih salah satu:", sheet_names)
@@ -112,7 +117,7 @@ if uploaded_file:
         # --- UI DASHBOARD ---
         st.markdown(f"<h1 style='text-align: center; color: #60A5FA;'>📊 Laporan: {uploaded_file.name}</h1>", unsafe_allow_html=True)
         
-        # Tombol Ganti File (Tombol Sakti untuk balik ke menu awal)
+        # Tombol Ganti File
         if st.button("⬅️ Ganti File / Upload Ulang"):
             st.rerun()
 
@@ -122,7 +127,7 @@ if uploaded_file:
         pilihan = st.selectbox("🎯 Pilih Metrik Penjualan:", [c for c in df_final.columns if c != 'Kategori'])
         fig = px.bar(df_final, x='Kategori', y=pilihan, text_auto='.2s', color_discrete_sequence=['#60A5FA'])
         fig.update_layout(template="plotly_dark", height=600, title_x=0.5)
-        st.plotly_chart(fig, width='stretch')
+        st.plotly_chart(fig, use_container_width=True)
 
         st.markdown("---")
 
@@ -142,11 +147,11 @@ if uploaded_file:
                     prs.save(out)
                     st.download_button("📥 Download .pptx", out.getvalue(), f"Laporan_{pilihan}.pptx")
                 except Exception as e:
-                    st.error("Kaleido belum siap di server. Silakan tunggu sebentar atau refresh halaman.")
+                    st.error("Gagal membuat PPT. Pastikan semua file pendukung sudah terinstal.")
 
         with col_tab:
             st.markdown("### 📋 Tabel Hasil Konversi")
-            st.dataframe(df_final, width='stretch', height=400)
+            st.dataframe(df_final, use_container_width=True, height=400)
 
     except Exception as e:
         st.error(f"Gagal memproses data: {e}")
@@ -162,17 +167,18 @@ else:
         </div>
     """, unsafe_allow_html=True)
     
-    
-
-[Image of data visualization dashboard]
-
-
     c1, c2, c3 = st.columns(3)
     steps = [
         ("📁", "1. Unggah", "Gunakan menu di sebelah kiri untuk memasukkan file laporan Papa."),
         ("📊", "2. Pantau", "Dashboard akan otomatis Full Screen untuk grafik yang besar."),
-        ("🎞️", "3. Ekspor", "Download hasil ke PowerPoint untuk bahan rapat presentasi.")
+        ("🎞️", "3. Ekspor", "Download hasil ke PowerPoint untuk bahan presentasi rapat.")
     ]
     for i, (icon, title, desc) in enumerate(steps):
         with [c1, c2, c3][i]:
-            st.markdown(f"<div class='instruction-card'><div style='font-size: 70px;'>{icon}</div><h3>{title}</h3><p>{desc}</p></div>", unsafe_allow_html=True)
+            st.markdown(f"""
+                <div class="instruction-card">
+                    <div style='font-size: 70px;'>{icon}</div>
+                    <h3>{title}</h3>
+                    <p>{desc}</p>
+                </div>
+            """, unsafe_allow_html=True)
