@@ -10,7 +10,7 @@ st.set_page_config(
     page_title="Sales Analytics Pro",
     page_icon="📊",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded" # Sekarang otomatis terbuka terus
 )
 
 # 2. CUSTOM CSS (Jurus Paksa Tengah & Dark Mode)
@@ -199,7 +199,6 @@ else:
     st.markdown("<h1>Portal Analisis Data Anda</h1>", unsafe_allow_html=True)
     st.markdown("<h2>Dashboard eksekutif untuk monitoring laporan mingguan.</h2>", unsafe_allow_html=True)
     
-    # HTML murni dengan Inline Flex agar TIDAK BISA dibantah Streamlit
     st.markdown("""
     <div style="display: flex; justify-content: center; width: 100%;">
         <div class="instruction-container">
