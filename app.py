@@ -13,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="expanded" 
 )
 
-# 2. CUSTOM CSS (Full Dark Mode, Sejajar & Auto Full Screen)
+# 2. CUSTOM CSS (Jurus Rata Tengah, Sejajar & Sidebar Lock)
 st.markdown("""
     <style>
     .stApp {
@@ -26,49 +26,43 @@ st.markdown("""
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 25px;
+        gap: 30px;
         width: 100%;
         margin-bottom: 40px;
         flex-wrap: wrap;
         text-align: center;
     }
     .header-row h1 {
-        font-size: 45px !important;
+        font-size: 48px !important;
         font-weight: 850 !important;
         color: #60A5FA !important;
         margin: 0 !important;
     }
     .header-row h2 {
-        font-size: 20px !important;
+        font-size: 22px !important;
         font-weight: 400 !important;
         color: #CBD5E1 !important;
         margin: 0 !important;
         border-bottom: none !important;
     }
 
-    /* Container Tengah */
+    /* Kunci Sidebar (Hilangkan tombol minimize di pojok) */
+    [data-testid="stSidebarCollapseButton"] {
+        display: none !important;
+    }
+
+    /* Kontainer Tengah */
     [data-testid="stAppViewBlockContainer"] {
         max-width: 1200px !important;
         margin: auto !important;
     }
 
-    /* Kunci Sidebar (Sembunyikan tombol panah minimize di pojok) */
-    [data-testid="stSidebarCollapseButton"] {
-        display: none !important;
-    }
-
-    /* Kartu Instruksi */
     .instruction-card {
         background-color: #1E293B;
         padding: 30px;
         border-radius: 20px;
         border: 2px solid #3B82F6;
         text-align: center;
-        min-height: 280px;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -83,45 +77,42 @@ with st.sidebar:
 # --- LOGIKA DASHBOARD ---
 if uploaded_file:
     # JURUS FULL SCREEN: Sembunyikan Sidebar saat data tampil
-    st.markdown("""
-        <style>
-        [data-testid="stSidebar"] { display: none !important; }
-        .main .block-container { max-width: 95% !important; padding-top: 1rem !important; }
-        </style>
-        """, unsafe_allow_html=True)
+    st.markdown("<style>[data-testid='stSidebar'] { display: none !important; }</style>", unsafe_allow_html=True)
 
     try:
-        # DETEKSI SHEET (KEMBALI HADIR!)
+        # DETEKSI SHEET (KEMBALI)
         if uploaded_file.name.endswith('.csv'):
             df_raw = pd.read_csv(uploaded_file, header=None)
         else:
             excel_file = pd.ExcelFile(uploaded_file)
             sheet_names = excel_file.sheet_names
             
-            # Jika ada banyak sheet, tampilkan pilihan di area utama
+            # Jika ada banyak sheet, tampilkan pilihan di area utama (Karena sidebar ngumpet)
             if len(sheet_names) > 1:
-                st.markdown("### 📂 Deteksi Multiple Sheets")
-                selected_sheet = st.selectbox("Pilih Halaman Laporan yang ingin dianalisis:", sheet_names)
+                st.markdown("### 📂 Pilih Halaman Data")
+                selected_sheet = st.selectbox("Laporan ini punya beberapa halaman. Pilih salah satu:", sheet_names)
                 df_raw = pd.read_excel(uploaded_file, sheet_name=selected_sheet, header=None)
             else:
                 df_raw = pd.read_excel(uploaded_file, sheet_name=0, header=None)
 
-        # Pembersihan Data (Format Papa)
+        # 1. PEMBERSIHAN DATA FORMAT PAPA
         df_raw = df_raw.dropna(how='all', axis=0).dropna(how='all', axis=1).reset_index(drop=True)
         weeks, prods = df_raw.iloc[0].ffill(), df_raw.iloc[1]
         headers = [f"{str(w).replace('nan','')} - {str(p).replace('nan','')}".strip(" -") for w, p in zip(weeks[1:], prods[1:])]
+        
         df_temp = pd.DataFrame(df_raw.iloc[2:, 1:].values, columns=headers)
         df_temp['Metrik'] = df_raw.iloc[2:, 0].values
         mask = df_temp.drop('Metrik', axis=1).apply(lambda r: pd.to_numeric(r, errors='coerce').notnull().any(), axis=1)
         df_temp = df_temp[mask].reset_index(drop=True)
+        
         df_final = df_temp.melt(id_vars=['Metrik'], var_name='Kategori', value_name='Nilai').pivot_table(index='Kategori', columns='Metrik', values='Nilai', aggfunc='first').reset_index()
         for c in df_final.columns:
             if c != 'Kategori': df_final[c] = pd.to_numeric(df_final[c], errors='coerce').fillna(0)
 
-        # UI DASHBOARD
+        # --- UI DASHBOARD ---
         st.markdown(f"<h1 style='text-align: center; color: #60A5FA;'>📊 Laporan: {uploaded_file.name}</h1>", unsafe_allow_html=True)
         
-        # Tombol Kembali/Ganti File
+        # Tombol Ganti File (Tombol Sakti untuk balik ke menu awal)
         if st.button("⬅️ Ganti File / Upload Ulang"):
             st.rerun()
 
@@ -135,7 +126,7 @@ if uploaded_file:
 
         st.markdown("---")
 
-        # TABEL HASIL & PPT
+        # Tabel Hasil & PPT
         col_down, col_tab = st.columns([1, 1.5])
         
         with col_down:
@@ -151,7 +142,7 @@ if uploaded_file:
                     prs.save(out)
                     st.download_button("📥 Download .pptx", out.getvalue(), f"Laporan_{pilihan}.pptx")
                 except Exception as e:
-                    st.error(f"Fitur PPT Error: {e}")
+                    st.error("Kaleido belum siap di server. Silakan tunggu sebentar atau refresh halaman.")
 
         with col_tab:
             st.markdown("### 📋 Tabel Hasil Konversi")
@@ -159,7 +150,8 @@ if uploaded_file:
 
     except Exception as e:
         st.error(f"Gagal memproses data: {e}")
-        if st.button("Refresh"): st.rerun()
+        if st.button("Refresh Aplikasi"):
+            st.rerun()
 
 else:
     # --- TAMPILAN AWAL (JUDUL SEJAJAR) ---
@@ -172,11 +164,14 @@ else:
     
     
 
+[Image of data visualization dashboard]
+
+
     c1, c2, c3 = st.columns(3)
     steps = [
-        ("📁", "1. Unggah", "Gunakan menu di sebelah kiri untuk memasukkan file Excel Papa."),
+        ("📁", "1. Unggah", "Gunakan menu di sebelah kiri untuk memasukkan file laporan Papa."),
         ("📊", "2. Pantau", "Dashboard akan otomatis Full Screen untuk grafik yang besar."),
-        ("🎞️", "3. Ekspor", "Download hasil ke PowerPoint untuk bahan presentasi rapat.")
+        ("🎞️", "3. Ekspor", "Download hasil ke PowerPoint untuk bahan rapat presentasi.")
     ]
     for i, (icon, title, desc) in enumerate(steps):
         with [c1, c2, c3][i]:
