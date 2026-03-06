@@ -10,60 +10,58 @@ st.set_page_config(
     page_title="Sales Analytics Pro",
     page_icon="📊",
     layout="wide",
-    initial_sidebar_state="expanded" # Sekarang otomatis terbuka terus
+    initial_sidebar_state="expanded" 
 )
 
-# 2. CUSTOM CSS (Jurus Paksa Tengah & Dark Mode)
+# 2. CUSTOM CSS (Jurus Paksa & Layout Sejajar)
 st.markdown("""
     <style>
-    /* 1. Background Utama */
     .stApp {
         background-color: #0E1117 !important;
         color: #FFFFFF !important;
     }
 
-    /* 2. Memaksa Kontainer Streamlit agar Benar-benar di Tengah */
-    .main .block-container {
-        max-width: 1200px !important;
-        padding-left: 2rem !important;
-        padding-right: 2rem !important;
-        margin: auto !important;
+    /* 2a. Layout Judul & Subtitle Sejajar (Horizontal) */
+    .header-container {
         display: flex;
-        flex-direction: column;
-        align-items: center;
+        align-items: baseline;
+        justify-content: center;
+        gap: 30px;
+        width: 100%;
+        margin-bottom: 40px;
+        flex-wrap: wrap;
     }
-
-    /* 3. Judul & Subtitle (Pasti Tengah) */
-    h1 {
-        font-size: 70px !important;
+    .header-container h1 {
+        font-size: 55px !important;
         font-weight: 850 !important;
         color: #60A5FA !important;
-        text-align: center !important;
-        width: 100% !important;
-        margin-top: 20px !important;
+        margin: 0 !important;
     }
-    h2 {
-        font-size: 32px !important;
+    .header-container h2 {
+        font-size: 24px !important;
         font-weight: 400 !important;
         color: #CBD5E1 !important;
-        text-align: center !important;
-        width: 100% !important;
+        margin: 0 !important;
         border-bottom: none !important;
-        margin-bottom: 50px !important;
     }
 
-    /* 4. Kartu Instruksi (Flexbox Centering) */
-    .centered-wrapper {
-        display: flex;
-        justify-content: center;
-        width: 100%;
+    /* 2b. Sidebar Styling */
+    [data-testid="stSidebar"] {
+        background-color: #1E293B !important;
+        min-width: 400px !important;
     }
+    [data-testid="stSidebar"] h2 {
+        font-size: 35px !important;
+        text-align: left !important;
+    }
+
+    /* 2c. Kartu Instruksi Simetris */
     .instruction-container {
         display: flex;
-        flex-direction: row;
+        justify-content: center;
         gap: 25px;
         width: 100%;
-        max-width: 1000px;
+        max-width: 1100px;
     }
     .instruction-card {
         background-color: #1E293B;
@@ -76,57 +74,47 @@ st.markdown("""
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        box-shadow: 0 15px 30px rgba(0,0,0,0.5);
-    }
-    .instruction-card h3 {
-        font-size: 28px !important;
-        margin-top: 20px !important;
-        color: #F8FAFC !important;
-    }
-    .instruction-card p {
-        font-size: 20px !important;
-        color: #94A3B8 !important;
+        min-height: 320px;
     }
 
-    /* 5. Sidebar Styling */
-    [data-testid="stSidebar"] {
-        background-color: #1E293B !important;
-        min-width: 380px !important;
-    }
-    [data-testid="stSidebar"] h2 {
-        font-size: 35px !important;
-        text-align: left !important;
-    }
-
-    /* 6. Memperbesar Elemen UI */
+    /* 2d. Memperbesar Elemen UI */
     .stSelectbox, .stButton {
         max-width: 600px !important;
         margin: auto !important;
     }
-    
     [data-testid="stMetric"] {
-        text-align: center !important;
         background: rgba(255, 255, 255, 0.05);
         padding: 20px;
         border-radius: 15px;
     }
 
-    /* Responsive Mobile */
+    /* CSS Khusus Mobile */
     @media (max-width: 768px) {
-        h1 { font-size: 45px !important; }
-        h2 { font-size: 24px !important; }
-        .instruction-container { flex-direction: column; align-items: center; }
-        .instruction-card { width: 100%; min-height: auto; }
+        .header-container { flex-direction: column; align-items: center; text-align: center; }
+        .header-container h1 { font-size: 35px !important; }
+        .instruction-container { flex-direction: column; }
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- SIDEBAR ---
+# --- SIDEBAR & LOGIKA FULL SCREEN ---
 with st.sidebar:
     st.markdown("## 📥 Panel Kontrol")
     uploaded_file = st.file_uploader("Upload File Laporan Papa", type=['xlsx', 'csv'])
     st.markdown("---")
-    st.info("Pilih file Excel/CSV di atas untuk menampilkan dashboard.")
+
+if not uploaded_file:
+    # SEMBUNYIKAN TOMBOL MINIMIZE (Tanda Panah) SAAT AWAL
+    st.markdown("<style>div[data-testid='stSidebarCollapseButton'] { display: none; }</style>", unsafe_allow_html=True)
+else:
+    # JURUS FULL SCREEN: Sembunyikan Sidebar sepenuhnya saat data muncul
+    st.markdown("""
+        <style>
+        [data-testid="stSidebar"] { display: none !important; }
+        [data-testid="stSidebarCollapseButton"] { display: none !important; }
+        .main .block-container { max-width: 95% !important; padding-top: 2rem !important; }
+        </style>
+        """, unsafe_allow_html=True)
 
 # --- LOGIKA DASHBOARD ---
 if uploaded_file:
@@ -143,61 +131,57 @@ if uploaded_file:
         df_raw = df_raw.dropna(how='all', axis=0).dropna(how='all', axis=1).reset_index(drop=True)
         weeks, prods = df_raw.iloc[0].ffill(), df_raw.iloc[1]
         headers = [f"{str(w).replace('nan','')} - {str(p).replace('nan','')}".strip(" -") for w, p in zip(weeks[1:], prods[1:])]
-        
         df_temp = pd.DataFrame(df_raw.iloc[2:, 1:].values, columns=headers)
         df_temp['Metrik'] = df_raw.iloc[2:, 0].values
         mask = df_temp.drop('Metrik', axis=1).apply(lambda r: pd.to_numeric(r, errors='coerce').notnull().any(), axis=1)
         df_temp = df_temp[mask].reset_index(drop=True)
-        
         df_final = df_temp.melt(id_vars=['Metrik'], var_name='Kategori', value_name='Nilai').pivot_table(index='Kategori', columns='Metrik', values='Nilai', aggfunc='first').reset_index()
         for c in df_final.columns:
             if c != 'Kategori': df_final[c] = pd.to_numeric(df_final[c], errors='coerce').fillna(0)
 
-        # UI DASHBOARD (SETELAH UPLOAD)
+        # TAMPILAN DASHBOARD (FULL SCREEN)
         st.markdown(f"<h1>Laporan: {uploaded_file.name}</h1>", unsafe_allow_html=True)
         
-        # Centering Metrics
-        c_m1, c_m2, c_m3 = st.columns([1, 2, 1])
-        with c_m2:
-            m1, m2 = st.columns(2)
-            m1.metric("Periode Terdeteksi", f"{len(df_final)} Kolom")
-            m2.metric("Jenis Data", f"{len(df_final.columns)-1} Baris")
+        m1, m2 = st.columns(2)
+        m1.metric("Periode Terdeteksi", f"{len(df_final)} Kolom")
+        m2.metric("Jenis Data", f"{len(df_final.columns)-1} Baris")
 
         st.markdown("<br>", unsafe_allow_html=True)
-        
-        # Dropdown Tengah
         pilihan = st.selectbox("🎯 Pilih Metrik Penjualan:", [c for c in df_final.columns if c != 'Kategori'])
         
-        # Grafik Tengah
-        fig = px.bar(df_final, x='Kategori', y=pilihan, text_auto='.2s', 
-                     color_discrete_sequence=['#60A5FA'], title=f"Visualisasi {pilihan}")
+        fig = px.bar(df_final, x='Kategori', y=pilihan, text_auto='.2s', color_discrete_sequence=['#60A5FA'], title=f"Visualisasi {pilihan}")
         fig.update_layout(template="plotly_dark", font=dict(size=18), height=650, title_x=0.5)
         st.plotly_chart(fig, use_container_width=True)
 
-        # Tombol Tengah
+        # Bagian Bawah
         st.markdown("---")
-        c_b1, c_b2, c_b3 = st.columns([1, 1, 1])
-        with c_b2:
-            if st.button("🚀 Buat Slide PowerPoint"):
-                prs = Presentation()
-                slide = prs.slides.add_slide(prs.slide_layouts[5])
-                slide.shapes.title.text = f"Analisis {pilihan}"
-                img_io = io.BytesIO(fig.to_image(format="png", width=1200, height=700))
-                slide.shapes.add_picture(img_io, Inches(0.5), Inches(1.5), width=Inches(9))
-                out = io.BytesIO()
-                prs.save(out)
-                st.download_button("📥 Download PPT", out.getvalue(), f"Laporan_{pilihan}.pptx")
-            
-            with st.expander("🔍 Lihat Detail Tabel Data"):
-                st.dataframe(df_final, use_container_width=True)
+        if st.button("🚀 Buat Slide PowerPoint"):
+            prs = Presentation()
+            slide = prs.slides.add_slide(prs.slide_layouts[5])
+            slide.shapes.title.text = f"Analisis {pilihan}"
+            img_io = io.BytesIO(fig.to_image(format="png", width=1200, height=700))
+            slide.shapes.add_picture(img_io, Inches(0.5), Inches(1.5), width=Inches(9))
+            out = io.BytesIO()
+            prs.save(out)
+            st.download_button("📥 Download PPT", out.getvalue(), f"Laporan_{pilihan}.pptx")
+        
+        # Tombol Reset (Agar bisa upload lagi karena Sidebar hilang)
+        if st.button("🔄 Ganti File / Upload Ulang"):
+            st.rerun()
 
     except Exception as e:
         st.error(f"Error: {e}")
 
 else:
-    # --- TAMPILAN AWAL (LANDING PAGE) ---
-    st.markdown("<h1>Portal Analisis Data Anda</h1>", unsafe_allow_html=True)
-    st.markdown("<h2>Dashboard eksekutif untuk monitoring laporan mingguan.</h2>", unsafe_allow_html=True)
+    # --- TAMPILAN AWAL (SEJAJAR) ---
+    st.markdown("""
+        <div class="header-container">
+            <h1>Portal Analisis Data Anda</h1>
+            <h2>Dashboard eksekutif untuk monitoring laporan mingguan</h2>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    
     
     st.markdown("""
     <div style="display: flex; justify-content: center; width: 100%;">
@@ -205,12 +189,12 @@ else:
             <div class="instruction-card">
                 <div style='font-size: 70px;'>📁</div>
                 <h3>1. Unggah</h3>
-                <p>Buka panel kontrol di kiri atas, masukkan file laporan Papa.</p>
+                <p>Gunakan menu di sebelah kiri untuk memasukkan file laporan Papa.</p>
             </div>
             <div class="instruction-card">
                 <div style='font-size: 70px;'>📊</div>
                 <h3>2. Pantau</h3>
-                <p>Lihat tren data melalui grafik interaktif yang bersih.</p>
+                <p>Dashboard akan otomatis melebar untuk menampilkan grafik yang jelas.</p>
             </div>
             <div class="instruction-card">
                 <div style='font-size: 70px;'>🎞️</div>
