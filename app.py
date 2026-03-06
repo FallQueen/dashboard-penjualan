@@ -13,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="expanded" 
 )
 
-# 2. CUSTOM CSS (Jurus Rata Tengah & Sejajar)
+# 2. CUSTOM CSS (Full Dark Mode & Sejajar)
 st.markdown("""
     <style>
     .stApp {
@@ -22,22 +22,22 @@ st.markdown("""
     }
 
     /* Judul & Subtitle Sejajar (Horizontal) */
-    .header-container {
+    .header-row {
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 20px;
+        gap: 30px;
         width: 100%;
-        margin-bottom: 30px;
-        text-align: center;
+        margin-bottom: 40px;
+        flex-wrap: wrap;
     }
-    .header-container h1 {
-        font-size: 48px !important;
+    .header-row h1 {
+        font-size: 50px !important;
         font-weight: 850 !important;
         color: #60A5FA !important;
         margin: 0 !important;
     }
-    .header-container h2 {
+    .header-row h2 {
         font-size: 22px !important;
         font-weight: 400 !important;
         color: #CBD5E1 !important;
@@ -45,16 +45,10 @@ st.markdown("""
         border-bottom: none !important;
     }
 
-    /* Kunci Lebar Dashboard agar di Tengah */
-    [data-testid="stAppViewBlockContainer"] {
-        max-width: 1200px !important;
-        margin: auto !important;
-    }
-
     /* Card Instruksi */
     .instruction-card {
         background-color: #1E293B;
-        padding: 30px;
+        padding: 35px;
         border-radius: 20px;
         border: 2px solid #3B82F6;
         text-align: center;
@@ -65,7 +59,7 @@ st.markdown("""
         align-items: center;
     }
 
-    /* Sidebar Kaku (Hapus Tombol Tutup di Awal) */
+    /* Kunci Sidebar di Awal (Sembunyikan Tombol Panah) */
     [data-testid="stSidebarCollapseButton"] {
         display: none !important;
     }
@@ -77,7 +71,9 @@ with st.sidebar:
     st.markdown("## 📥 Panel Kontrol")
     uploaded_file = st.file_uploader("Upload File Laporan Papa", type=['xlsx', 'csv'])
     st.markdown("---")
-    st.info("💡 Pilih file Excel/CSV untuk memunculkan Dashboard Full Screen.")
+    if uploaded_file:
+        if st.button("🔄 Ganti File / Upload Ulang"):
+            st.rerun()
 
 # --- LOGIKA DASHBOARD ---
 if uploaded_file:
@@ -95,10 +91,9 @@ if uploaded_file:
             df_raw = pd.read_csv(uploaded_file, header=None)
         else:
             excel = pd.ExcelFile(uploaded_file)
-            # Ambil sheet pertama saja agar tidak ribet
             df_raw = pd.read_excel(uploaded_file, sheet_name=0, header=None)
 
-        # Pembersihan Data Format Papa
+        # Pembersihan Data (Format Papa)
         df_raw = df_raw.dropna(how='all', axis=0).dropna(how='all', axis=1).reset_index(drop=True)
         weeks, prods = df_raw.iloc[0].ffill(), df_raw.iloc[1]
         headers = [f"{str(w).replace('nan','')} - {str(p).replace('nan','')}".strip(" -") for w, p in zip(weeks[1:], prods[1:])]
@@ -110,51 +105,49 @@ if uploaded_file:
         for c in df_final.columns:
             if c != 'Kategori': df_final[c] = pd.to_numeric(df_final[c], errors='coerce').fillna(0)
 
-        # --- TAMPILAN DASHBOARD ---
-        st.markdown(f"<h1>📊 Laporan: {uploaded_file.name}</h1>", unsafe_allow_html=True)
+        # UI DASHBOARD
+        st.markdown(f"<h1 style='text-align: center; color: #60A5FA;'>📊 Laporan: {uploaded_file.name}</h1>", unsafe_allow_html=True)
         
-        # Tombol Kembali (Biar Sidebar Muncul Lagi)
-        if st.button("🔄 Ganti File / Kembali ke Menu Utama"):
+        # Tombol Kembali
+        if st.button("⬅️ Ganti File"):
             st.rerun()
 
         st.markdown("---")
 
-        # 2. GRAFIK
+        # Visualisasi
         pilihan = st.selectbox("🎯 Pilih Metrik Penjualan:", [c for c in df_final.columns if c != 'Kategori'])
         fig = px.bar(df_final, x='Kategori', y=pilihan, text_auto='.2s', color_discrete_sequence=['#60A5FA'])
-        fig.update_layout(template="plotly_dark", height=600, title=f"Tren {pilihan}", title_x=0.5)
+        fig.update_layout(template="plotly_dark", height=600, title_x=0.5)
         st.plotly_chart(fig, width="stretch")
 
-        # 3. TOMBOL EKSPOR & TABEL (Nggak bakal hilang)
-        col_down, col_tab = st.columns([1, 1])
+        # Bagian Bawah: Tombol & Tabel (Nggak bakal hilang lagi)
+        st.markdown("---")
+        col_down, col_tab = st.columns([1, 1.5])
         
         with col_down:
             st.markdown("### 📽️ Presentasi")
             if st.button("🚀 Buat Slide PowerPoint"):
-                try:
-                    prs = Presentation()
-                    slide = prs.slides.add_slide(prs.slide_layouts[5])
-                    slide.shapes.title.text = f"Laporan {pilihan}"
-                    img_io = io.BytesIO(fig.to_image(format="png", width=1200, height=700))
-                    slide.shapes.add_picture(img_io, Inches(0.5), Inches(1.5), width=Inches(9))
-                    out = io.BytesIO()
-                    prs.save(out)
-                    st.download_button("📥 Download .pptx", out.getvalue(), f"Laporan_{pilihan}.pptx")
-                except:
-                    st.error("Gagal membuat PPT. Coba ganti versi Python ke 3.11 di Settings.")
+                prs = Presentation()
+                slide = prs.slides.add_slide(prs.slide_layouts[5])
+                slide.shapes.title.text = f"Analisis {pilihan}"
+                img_io = io.BytesIO(fig.to_image(format="png", width=1200, height=700))
+                slide.shapes.add_picture(img_io, Inches(0.5), Inches(1.5), width=Inches(9))
+                out = io.BytesIO()
+                prs.save(out)
+                st.download_button("📥 Download .pptx", out.getvalue(), f"Laporan_{pilihan}.pptx")
 
         with col_tab:
             st.markdown("### 📋 Tabel Hasil Konversi")
             st.dataframe(df_final, width="stretch", height=400)
 
     except Exception as e:
-        st.error(f"Error: {e}")
-        if st.button("Reset Aplikasi"): st.rerun()
+        st.error(f"Gagal memproses data: {e}")
+        if st.button("Refresh"): st.rerun()
 
 else:
     # --- TAMPILAN AWAL (SEJAJAR) ---
     st.markdown("""
-        <div class="header-container">
+        <div class="header-row">
             <h1>Portal Analisis Data Anda</h1>
             <h2>Dashboard eksekutif monitoring laporan mingguan</h2>
         </div>
