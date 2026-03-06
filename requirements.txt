@@ -3,7 +3,8 @@ pandas
 plotly
 openpyxl
 python-pptx
-kaleido==1.0.0
+kaleido
+
 
 
 
