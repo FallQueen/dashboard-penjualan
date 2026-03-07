@@ -2,10 +2,5 @@ streamlit
 pandas
 plotly
 openpyxl
-python-pptx
-kaleido
-
-
-
-
-
+fpdf2
+matplotlib
