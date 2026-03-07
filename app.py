@@ -132,7 +132,7 @@ if uploaded_file:
         
         if st.button("🚀 Buat File PDF"):
             try:
-                # 1. Buat Gambar Grafik Pakai Matplotlib (Lebih stabil dari Kaleido)
+                # 1. Buat Gambar Grafik Pakai Matplotlib
                 fig_pdf, ax = plt.subplots(figsize=(10, 5))
                 ax.bar(df_final['Kategori'], df_final[pilihan], color='#60A5FA')
                 ax.set_title(f"Analisis Penjualan: {pilihan}", fontsize=14, fontweight='bold')
@@ -160,8 +160,9 @@ if uploaded_file:
                 pdf.image(img_buf, x=10, w=190)
                 pdf.ln(5)
                 
-                # Output PDF ke tombol Download
-                pdf_bytes = pdf.output()
+                # Output PDF ke tombol Download (PERBAIKAN DI SINI: convert ke bytes)
+                pdf_bytes = bytes(pdf.output())
+                
                 st.download_button(
                     label="📥 Download PDF Sekarang",
                     data=pdf_bytes,
