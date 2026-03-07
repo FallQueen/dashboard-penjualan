@@ -69,6 +69,14 @@ st.markdown("""
         justify-content: center;
         align-items: center;
     }
+    
+    /* Box Metrik Ringkasan */
+    [data-testid="stMetric"] {
+        background: rgba(255, 255, 255, 0.05);
+        padding: 15px;
+        border-radius: 10px;
+        text-align: center;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -113,10 +121,36 @@ if uploaded_file:
         st.markdown(f"<h1 style='text-align: center; color: #60A5FA; font-size: 50px;'>📊 Laporan: {uploaded_file.name}</h1>", unsafe_allow_html=True)
         st.markdown("---")
 
-        # Grafik Interaktif (Web)
-        pilihan = st.selectbox("🎯 Pilih Metrik Penjualan:", [c for c in df_final.columns if c != 'Kategori'])
-        fig = px.bar(df_final, x='Kategori', y=pilihan, text_auto='.2s', color_discrete_sequence=['#60A5FA'])
-        fig.update_layout(template="plotly_dark", height=550, title=f"Tren {pilihan}", title_x=0.5)
+        # AREA PILIHAN: METRIK & BENTUK GRAFIK
+        col_opt1, col_opt2 = st.columns(2)
+        with col_opt1:
+            pilihan = st.selectbox("🎯 Pilih Metrik Penjualan:", [c for c in df_final.columns if c != 'Kategori'])
+        with col_opt2:
+            jenis_grafik = st.selectbox("📈 Pilih Bentuk Diagram:", ["Diagram Batang (Bar)", "Diagram Garis (Line)", "Diagram Lingkaran (Pie)"])
+
+        # MENGHITUNG AVERAGE, TOTAL, DAN MAX
+        rata_rata = df_final[pilihan].mean()
+        total_semua = df_final[pilihan].sum()
+        nilai_tertinggi = df_final[pilihan].max()
+
+        # TAMPILKAN KOTAK RINGKASAN (EXECUTIVE SUMMARY)
+        st.markdown("### 💡 Ringkasan Analisis")
+        c_sum1, c_sum2, c_sum3 = st.columns(3)
+        c_sum1.metric(label="Rata-rata (Average)", value=f"{rata_rata:,.2f}")
+        c_sum2.metric(label="Total Keseluruhan", value=f"{total_semua:,.0f}")
+        c_sum3.metric(label="Nilai Tertinggi", value=f"{nilai_tertinggi:,.0f}")
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # GRAFIK INTERAKTIF (WEB)
+        if jenis_grafik == "Diagram Batang (Bar)":
+            fig = px.bar(df_final, x='Kategori', y=pilihan, text_auto='.2s', color_discrete_sequence=['#60A5FA'])
+        elif jenis_grafik == "Diagram Garis (Line)":
+            fig = px.line(df_final, x='Kategori', y=pilihan, markers=True, color_discrete_sequence=['#60A5FA'])
+        else:
+            fig = px.pie(df_final, names='Kategori', values=pilihan, hole=0.3, color_discrete_sequence=px.colors.sequential.Blues_r)
+            
+        fig.update_layout(template="plotly_dark", height=550, title=f"Visualisasi {pilihan}", title_x=0.5)
         st.plotly_chart(fig, use_container_width=True)
 
         st.markdown("---")
@@ -125,20 +159,32 @@ if uploaded_file:
         st.markdown("### 📋 Tabel Hasil Konversi Data Papa")
         st.dataframe(df_final, use_container_width=True, height=400)
 
-        # Menu Ekspor PDF (Anti Error)
+        # Menu Ekspor PDF
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("### 📄 Menu Ekspor Laporan (PDF)")
         st.write("Simpan laporan grafik dan data ini ke format PDF untuk dicetak atau dikirim.")
         
         if st.button("🚀 Buat File PDF"):
             try:
-                # 1. Buat Gambar Grafik Pakai Matplotlib
+                # 1. Buat Gambar Grafik Pakai Matplotlib (Menyesuaikan pilihan bentuk diagram)
                 fig_pdf, ax = plt.subplots(figsize=(10, 5))
-                ax.bar(df_final['Kategori'], df_final[pilihan], color='#60A5FA')
+                
+                if jenis_grafik == "Diagram Batang (Bar)":
+                    ax.bar(df_final['Kategori'], df_final[pilihan], color='#60A5FA')
+                    ax.set_xlabel('Kategori Minggu - Produk')
+                    ax.set_ylabel(pilihan)
+                    plt.xticks(rotation=45, ha='right')
+                elif jenis_grafik == "Diagram Garis (Line)":
+                    ax.plot(df_final['Kategori'], df_final[pilihan], color='#60A5FA', marker='o', linewidth=2)
+                    ax.set_xlabel('Kategori Minggu - Produk')
+                    ax.set_ylabel(pilihan)
+                    plt.xticks(rotation=45, ha='right')
+                    ax.grid(True, linestyle='--', alpha=0.6)
+                else: # Pie Chart
+                    ax.pie(df_final[pilihan], labels=df_final['Kategori'], autopct='%1.1f%%', startangle=90, colors=plt.cm.Blues(pd.Series(df_final[pilihan])/df_final[pilihan].max()))
+                    ax.axis('equal')
+
                 ax.set_title(f"Analisis Penjualan: {pilihan}", fontsize=14, fontweight='bold')
-                ax.set_xlabel('Kategori Minggu - Produk')
-                ax.set_ylabel(pilihan)
-                plt.xticks(rotation=45, ha='right')
                 plt.tight_layout()
 
                 # Simpan gambar ke memori sementara
@@ -158,9 +204,15 @@ if uploaded_file:
                 
                 # Masukkan Gambar Grafik ke PDF
                 pdf.image(img_buf, x=10, w=190)
-                pdf.ln(5)
+                pdf.ln(10)
+
+                # Tambahkan Teks Rata-rata & Total di PDF
+                pdf.set_font("helvetica", "", 12)
+                pdf.cell(0, 8, f"Rata-rata (Average): {rata_rata:,.2f}", new_x="LMARGIN", new_y="NEXT")
+                pdf.cell(0, 8, f"Total Keseluruhan: {total_semua:,.0f}", new_x="LMARGIN", new_y="NEXT")
+                pdf.cell(0, 8, f"Nilai Tertinggi: {nilai_tertinggi:,.0f}", new_x="LMARGIN", new_y="NEXT")
                 
-                # Output PDF ke tombol Download (PERBAIKAN DI SINI: convert ke bytes)
+                # Output PDF ke tombol Download (Format Bytes)
                 pdf_bytes = bytes(pdf.output())
                 
                 st.download_button(
