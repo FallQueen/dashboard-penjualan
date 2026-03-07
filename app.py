@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from pptx import Presentation
-from pptx.util import Inches
+import matplotlib.pyplot as plt
+from fpdf import FPDF
 import io
 
 # 1. KONFIGURASI HALAMAN
@@ -13,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="expanded" 
 )
 
-# 2. CUSTOM CSS (Full Dark Mode & Stacking Layout)
+# 2. CUSTOM CSS (Layout Bertumpuk & Sidebar Kaku)
 st.markdown("""
     <style>
     .stApp {
@@ -113,7 +113,7 @@ if uploaded_file:
         st.markdown(f"<h1 style='text-align: center; color: #60A5FA; font-size: 50px;'>📊 Laporan: {uploaded_file.name}</h1>", unsafe_allow_html=True)
         st.markdown("---")
 
-        # Grafik (Utama)
+        # Grafik Interaktif (Web)
         pilihan = st.selectbox("🎯 Pilih Metrik Penjualan:", [c for c in df_final.columns if c != 'Kategori'])
         fig = px.bar(df_final, x='Kategori', y=pilihan, text_auto='.2s', color_discrete_sequence=['#60A5FA'])
         fig.update_layout(template="plotly_dark", height=550, title=f"Tren {pilihan}", title_x=0.5)
@@ -125,21 +125,53 @@ if uploaded_file:
         st.markdown("### 📋 Tabel Hasil Konversi Data Papa")
         st.dataframe(df_final, use_container_width=True, height=400)
 
-        # Menu Ekspor (Di Bawah Tabel)
+        # Menu Ekspor PDF (Anti Error)
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("### 📽️ Menu Ekspor Laporan")
-        if st.button("🚀 Buat Slide PowerPoint"):
+        st.markdown("### 📄 Menu Ekspor Laporan (PDF)")
+        st.write("Simpan laporan grafik dan data ini ke format PDF untuk dicetak atau dikirim.")
+        
+        if st.button("🚀 Buat File PDF"):
             try:
-                prs = Presentation()
-                slide = prs.slides.add_slide(prs.slide_layouts[5])
-                slide.shapes.title.text = f"Analisis {pilihan}"
-                img_io = io.BytesIO(fig.to_image(format="png", width=1200, height=700))
-                slide.shapes.add_picture(img_io, Inches(0.5), Inches(1.5), width=Inches(9))
-                out = io.BytesIO()
-                prs.save(out)
-                st.download_button("📥 Download .pptx Sekarang", out.getvalue(), f"Laporan_{pilihan}.pptx")
-            except:
-                st.error("Gagal membuat PPT. Mohon tunggu proses instalasi Kaleido selesai di server.")
+                # 1. Buat Gambar Grafik Pakai Matplotlib (Lebih stabil dari Kaleido)
+                fig_pdf, ax = plt.subplots(figsize=(10, 5))
+                ax.bar(df_final['Kategori'], df_final[pilihan], color='#60A5FA')
+                ax.set_title(f"Analisis Penjualan: {pilihan}", fontsize=14, fontweight='bold')
+                ax.set_xlabel('Kategori Minggu - Produk')
+                ax.set_ylabel(pilihan)
+                plt.xticks(rotation=45, ha='right')
+                plt.tight_layout()
+
+                # Simpan gambar ke memori sementara
+                img_buf = io.BytesIO()
+                fig_pdf.savefig(img_buf, format='png')
+                img_buf.seek(0)
+                plt.close(fig_pdf)
+
+                # 2. Buat Dokumen PDF
+                pdf = FPDF()
+                pdf.add_page()
+                
+                # Tambah Judul PDF
+                pdf.set_font("helvetica", "B", 18)
+                pdf.cell(0, 10, f"Laporan Eksekutif: {pilihan}", new_x="LMARGIN", new_y="NEXT", align="C")
+                pdf.ln(5)
+                
+                # Masukkan Gambar Grafik ke PDF
+                pdf.image(img_buf, x=10, w=190)
+                pdf.ln(5)
+                
+                # Output PDF ke tombol Download
+                pdf_bytes = pdf.output()
+                st.download_button(
+                    label="📥 Download PDF Sekarang",
+                    data=pdf_bytes,
+                    file_name=f"Laporan_{pilihan}.pdf",
+                    mime="application/pdf"
+                )
+                st.success("✅ File PDF berhasil dibuat! Silakan klik tombol Download di atas.")
+                
+            except Exception as e:
+                st.error(f"Gagal membuat PDF. Detail error: {e}")
 
     except Exception as e:
         st.error(f"Gagal memproses data: {e}")
@@ -152,14 +184,12 @@ else:
             <h2>Dashboard eksekutif monitoring laporan mingguan</h2>
         </div>
     """, unsafe_allow_html=True)
-    
-    
 
     c1, c2, c3 = st.columns(3)
     steps = [
         ("📁", "1. Unggah", "Gunakan Panel Kontrol di kiri untuk memasukkan file laporan Papa."),
         ("📊", "2. Pantau", "Lihat tren data melalui grafik interaktif dan tabel konversi."),
-        ("🎞️", "3. Ekspor", "Download hasil ke PowerPoint untuk bahan presentasi rapat.")
+        ("📄", "3. Ekspor", "Download hasil ke PDF yang rapi dan siap untuk dibagikan.")
     ]
     for i, (icon, title, desc) in enumerate(steps):
         with [c1, c2, c3][i]:
