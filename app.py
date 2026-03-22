@@ -53,7 +53,7 @@ st.markdown("""
 # --- SIDEBAR (PANEL KONTROL) ---
 with st.sidebar:
     st.markdown("## 📥 Panel Kontrol")
-    uploaded_file = st.file_uploader("Upload File Laporan Papa", type=['xlsx', 'csv', 'xls'])
+    uploaded_file = st.file_uploader("Upload File Laporan", type=['xlsx', 'csv', 'xls'])
     st.markdown("---")
     
     # KEMBALI MENGGUNAKAN SHEET SELECTOR UNTUK FILE BANYAK TAB
@@ -248,7 +248,7 @@ else:
     
     c1, c2, c3 = st.columns(3)
     steps = [
-        ("📁", "1. Unggah", "Gunakan Panel Kontrol di kiri untuk memasukkan file laporan Papa."),
+        ("📁", "1. Unggah", "Gunakan Panel Kontrol di kiri untuk memasukkan file laporan."),
         ("📊", "2. Pantau", "Lihat tren data melalui grafik interaktif dan tabel konversi."),
         ("📄", "3. Ekspor", "Download hasil ke PDF yang rapi dan siap untuk dibagikan.")
     ]
