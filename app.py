@@ -14,7 +14,6 @@ st.set_page_config(
     initial_sidebar_state="expanded" 
 )
 
-# 2. CUSTOM CSS
 st.markdown("""
     <style>
     .stApp { background-color: #0E1117 !important; color: #FFFFFF !important; }
@@ -96,7 +95,7 @@ if uploaded_file:
                         
                     val = df_raw.iloc[data_r, data_c]
                     data_list.append({
-                        'MingguAsli': week_val, # Simpan teks aslinya (berisi tahun)
+                        'MingguAsli': week_val, 
                         'Produk': prod_val,
                         'Metrik': metric_name,
                         'Nilai': val
@@ -108,18 +107,15 @@ if uploaded_file:
 
         df_melted = pd.DataFrame(data_list)
         
-        # ✨ ALGORITMA SENSOR TAHUN LINTAS TAHUN ✨
+        # SENSOR TAHUN
         def parse_week_year(s):
             s_str = str(s)
-            # Tarik Angka Minggu
             w_match = re.search(r'(?:Week|Weeek|W)\s*(\d+)', s_str, flags=re.IGNORECASE)
             w_num = int(w_match.group(1)) if w_match else 0
             
-            # Tarik Angka Tahun (2025, 2026, dst)
             y_match = re.search(r'(20\d{2})', s_str)
-            y_num = int(y_match.group(1)) if y_match else 2000 # Default jika tidak ditulis tahunnya
+            y_num = int(y_match.group(1)) if y_match else 2000
             
-            # Percantik label sumbu X
             label = f"Week {w_num} ({y_num})" if y_match else f"Week {w_num}"
             return pd.Series([label, y_num, w_num])
 
@@ -134,7 +130,7 @@ if uploaded_file:
             
         df_melted['Nilai'] = df_melted['Nilai'].apply(clean_numeric).fillna(0)
         
-        # PIVOT DENGAN INDEX TAHUN DAN MINGGU
+        # PIVOT KESELURUHAN DATA
         df_final = df_melted.pivot_table(
             index=['TahunNum', 'WeekNum', 'Minggu', 'Produk'], 
             columns='Metrik', 
@@ -142,7 +138,6 @@ if uploaded_file:
             aggfunc='first'
         ).reset_index()
         
-        # ✨ SORTING SAKTI: Urutkan Tahun dulu, baru Minggu!
         df_final = df_final.sort_values(['TahunNum', 'WeekNum', 'Produk']).drop(columns=['TahunNum', 'WeekNum', 'MingguAsli'], errors='ignore').reset_index(drop=True)
 
         # --- UI DASHBOARD ---
@@ -168,20 +163,28 @@ if uploaded_file:
         
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # GRAFIK INTERAKTIF
-        if jenis_grafik == "Diagram Batang Berdampingan (Grouped Bar)":
-            fig = px.bar(df_final, x='Minggu', y=pilihan, color='Produk', barmode='group', text_auto='.2s', color_discrete_sequence=px.colors.qualitative.Pastel)
-        elif jenis_grafik == "Diagram Garis Tren (Line)":
-            fig = px.line(df_final, x='Minggu', y=pilihan, color='Produk', markers=True, color_discrete_sequence=px.colors.qualitative.Pastel)
+        # ✨ PERUBAHAN BARU: FILTER FOKUS DATA UNTUK GRAFIK
+        # Membuang baris yang nilainya 0 khusus agar grafik tidak kerdil
+        df_chart = df_final[df_final[pilihan] != 0].reset_index(drop=True)
+
+        if df_chart.empty:
+            st.info(f"Belum ada data (semua bernilai 0) untuk metrik: **{pilihan}**")
         else:
-            df_pie = df_final.groupby('Produk')[pilihan].sum().reset_index()
-            fig = px.pie(df_pie, names='Produk', values=pilihan, hole=0.3, color_discrete_sequence=px.colors.qualitative.Pastel)
-            
-        fig.update_layout(template="plotly_dark", height=550, title=f"Visualisasi {pilihan} ({selected_sheet})", title_x=0.5)
-        st.plotly_chart(fig, use_container_width=True)
+            # GRAFIK INTERAKTIF (Sekarang menggunakan df_chart yang sudah bersih dari angka 0)
+            if jenis_grafik == "Diagram Batang Berdampingan (Grouped Bar)":
+                fig = px.bar(df_chart, x='Minggu', y=pilihan, color='Produk', barmode='group', text_auto='.2s', color_discrete_sequence=px.colors.qualitative.Pastel)
+            elif jenis_grafik == "Diagram Garis Tren (Line)":
+                fig = px.line(df_chart, x='Minggu', y=pilihan, color='Produk', markers=True, color_discrete_sequence=px.colors.qualitative.Pastel)
+            else:
+                df_pie = df_chart.groupby('Produk')[pilihan].sum().reset_index()
+                fig = px.pie(df_pie, names='Produk', values=pilihan, hole=0.3, color_discrete_sequence=px.colors.qualitative.Pastel)
+                
+            fig.update_layout(template="plotly_dark", height=550, title=f"Visualisasi {pilihan} ({selected_sheet})", title_x=0.5)
+            st.plotly_chart(fig, use_container_width=True)
 
         st.markdown("---")
         st.markdown(f"### 📋 Tabel Hasil Konversi - {selected_sheet}")
+        # Tabel tetap menampilkan df_final agar Papa bisa melihat histori data 0-nya juga
         st.dataframe(df_final, use_container_width=True, height=400, hide_index=True)
 
         # EKSPOR PDF
@@ -189,47 +192,52 @@ if uploaded_file:
         st.markdown("### 📄 Menu Ekspor Laporan (PDF)")
         if st.button("🚀 Buat File PDF"):
             try:
-                fig_pdf, ax = plt.subplots(figsize=(10, 5))
-                if jenis_grafik != "Diagram Lingkaran (Pie)":
-                    df_pivot = df_final.pivot(index='Minggu', columns='Produk', values=pilihan)
-                
-                if jenis_grafik == "Diagram Batang Berdampingan (Grouped Bar)":
-                    df_pivot.plot(kind='bar', ax=ax, colormap='Paired')
-                    ax.set_ylabel(pilihan)
-                    plt.xticks(rotation=0)
-                elif jenis_grafik == "Diagram Garis Tren (Line)":
-                    df_pivot.plot(kind='line', marker='o', ax=ax, linewidth=2, colormap='Paired')
-                    ax.set_ylabel(pilihan)
-                    ax.grid(True, linestyle='--', alpha=0.6)
-                else: 
-                    df_pie = df_final.groupby('Produk')[pilihan].sum()
-                    ax.pie(df_pie, labels=df_pie.index, autopct='%1.1f%%', startangle=90, colors=plt.cm.Paired.colors)
-                    ax.axis('equal')
+                if df_chart.empty:
+                    st.error("Tidak bisa membuat PDF karena data kosong.")
+                else:
+                    fig_pdf, ax = plt.subplots(figsize=(10, 5))
+                    
+                    # PDF juga difokuskan menggunakan df_chart
+                    if jenis_grafik != "Diagram Lingkaran (Pie)":
+                        df_pivot = df_chart.pivot(index='Minggu', columns='Produk', values=pilihan)
+                    
+                    if jenis_grafik == "Diagram Batang Berdampingan (Grouped Bar)":
+                        df_pivot.plot(kind='bar', ax=ax, colormap='Paired')
+                        ax.set_ylabel(pilihan)
+                        plt.xticks(rotation=0)
+                    elif jenis_grafik == "Diagram Garis Tren (Line)":
+                        df_pivot.plot(kind='line', marker='o', ax=ax, linewidth=2, colormap='Paired')
+                        ax.set_ylabel(pilihan)
+                        ax.grid(True, linestyle='--', alpha=0.6)
+                    else: 
+                        df_pie = df_chart.groupby('Produk')[pilihan].sum()
+                        ax.pie(df_pie, labels=df_pie.index, autopct='%1.1f%%', startangle=90, colors=plt.cm.Paired.colors)
+                        ax.axis('equal')
 
-                ax.set_title(f"Analisis {pilihan} - {selected_sheet}", fontsize=14, fontweight='bold')
-                plt.tight_layout()
+                    ax.set_title(f"Analisis {pilihan} - {selected_sheet}", fontsize=14, fontweight='bold')
+                    plt.tight_layout()
 
-                img_buf = io.BytesIO()
-                fig_pdf.savefig(img_buf, format='png')
-                img_buf.seek(0)
-                plt.close(fig_pdf)
+                    img_buf = io.BytesIO()
+                    fig_pdf.savefig(img_buf, format='png')
+                    img_buf.seek(0)
+                    plt.close(fig_pdf)
 
-                pdf = FPDF()
-                pdf.add_page()
-                pdf.set_font("helvetica", "B", 18)
-                pdf.cell(0, 10, f"Laporan Eksekutif: {pilihan} ({selected_sheet})", new_x="LMARGIN", new_y="NEXT", align="C")
-                pdf.ln(5)
-                pdf.image(img_buf, x=10, w=190)
-                pdf.ln(10)
+                    pdf = FPDF()
+                    pdf.add_page()
+                    pdf.set_font("helvetica", "B", 18)
+                    pdf.cell(0, 10, f"Laporan Eksekutif: {pilihan} ({selected_sheet})", new_x="LMARGIN", new_y="NEXT", align="C")
+                    pdf.ln(5)
+                    pdf.image(img_buf, x=10, w=190)
+                    pdf.ln(10)
 
-                pdf.set_font("helvetica", "", 12)
-                pdf.cell(0, 8, f"Rata-rata: {rata_rata:,.2f}{satuan}", new_x="LMARGIN", new_y="NEXT")
-                pdf.cell(0, 8, f"Total: {total_semua:,.0f}{satuan}", new_x="LMARGIN", new_y="NEXT")
-                pdf.cell(0, 8, f"Tertinggi: {nilai_tertinggi:,.0f}{satuan}", new_x="LMARGIN", new_y="NEXT")
-                
-                pdf_bytes = bytes(pdf.output())
-                st.download_button(label="📥 Download PDF Sekarang", data=pdf_bytes, file_name=f"Laporan_{selected_sheet}_{pilihan.replace(' ', '_')}.pdf", mime="application/pdf")
-                st.success("✅ File PDF berhasil dibuat!")
+                    pdf.set_font("helvetica", "", 12)
+                    pdf.cell(0, 8, f"Rata-rata: {rata_rata:,.2f}{satuan}", new_x="LMARGIN", new_y="NEXT")
+                    pdf.cell(0, 8, f"Total: {total_semua:,.0f}{satuan}", new_x="LMARGIN", new_y="NEXT")
+                    pdf.cell(0, 8, f"Tertinggi: {nilai_tertinggi:,.0f}{satuan}", new_x="LMARGIN", new_y="NEXT")
+                    
+                    pdf_bytes = bytes(pdf.output())
+                    st.download_button(label="📥 Download PDF Sekarang", data=pdf_bytes, file_name=f"Laporan_{selected_sheet}_{pilihan.replace(' ', '_')}.pdf", mime="application/pdf")
+                    st.success("✅ File PDF berhasil dibuat!")
                 
             except Exception as e:
                 st.error(f"Gagal membuat PDF. Detail error: {e}")
