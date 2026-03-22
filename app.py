@@ -54,13 +54,10 @@ if uploaded_file:
         else:
             df_raw = pd.read_excel(uploaded_file, sheet_name=selected_sheet, header=None)
 
-        # Buang baris & kolom yang benar-benar tidak ada isinya sama sekali
         df_raw = df_raw.dropna(how='all', axis=0).dropna(how='all', axis=1).reset_index(drop=True)
-        
-        # Perbaiki typo "Weeek" jadi "Week"
         df_raw.iloc[0] = df_raw.iloc[0].astype(str).str.replace('Weeek', 'Week', regex=False)
         
-        # Ekstrak Baris Minggu dan Produk (Mengatasi Merge Cells dengan ffill)
+        # Ekstrak Baris Minggu dan Produk 
         weeks = df_raw.iloc[0].replace('nan', pd.NA).ffill()
         prods = df_raw.iloc[1]
         
@@ -72,20 +69,17 @@ if uploaded_file:
         df_temp = pd.DataFrame(df_raw.iloc[2:, 1:].values, columns=kategori)
         df_temp['Metrik'] = df_raw.iloc[2:, 0].values
         
-        # Saring Metrik: Pertahankan semua baris yang ada namanya (seperti BPJ, OOS, dll)
         df_temp = df_temp[df_temp['Metrik'].notna() & (df_temp['Metrik'].astype(str).str.strip() != '')].reset_index(drop=True)
         
         df_melted = df_temp.melt(id_vars=['Metrik'], var_name='Kategori', value_name='Nilai')
         df_melted[['Minggu', 'Produk']] = df_melted['Kategori'].str.split(' \|\|\| ', expand=True)
         
-        # Pembersih teks Minggu (Menyeragamkan W 39, Week 2, dll jadi Week X)
         def clean_week(s):
             match = re.search(r'(?:Week|Weeek|W)\s*(\d+)', str(s), flags=re.IGNORECASE)
             return f"Week {match.group(1)}" if match else str(s)
         
         df_melted['Minggu'] = df_melted['Minggu'].apply(clean_week)
         
-        # Pembersih Angka & Anti-Error Excel (#DIV/0!)
         def clean_numeric(val):
             if isinstance(val, str):
                 val = val.replace('%', '').replace(',', '').strip()
@@ -95,11 +89,13 @@ if uploaded_file:
             
         df_melted['Nilai'] = df_melted['Nilai'].apply(clean_numeric)
         
-        # Pivot Data kembali ke bentuk rapi
-        df_final = df_melted.pivot_table(index=['Minggu', 'Produk'], columns='Metrik', values='Nilai', aggfunc='first').reset_index()
-        df_final = df_final.fillna(0)
+        # ✨ PERBAIKAN UTAMA: Ubah semua data kosong jadi 0.0 SEBELUM dibuat tabel
+        # Ini mencegah Pivot Table membuang Callmade, SB, atau BPJ yang masih kosong!
+        df_melted['Nilai'] = df_melted['Nilai'].fillna(0)
         
-        # Urutkan Minggu secara otomatis berdasarkan angkanya
+        # Pivot Data
+        df_final = df_melted.pivot_table(index=['Minggu', 'Produk'], columns='Metrik', values='Nilai', aggfunc='first').reset_index()
+        
         def get_week_num(w):
             match = re.search(r'\d+', str(w))
             return int(match.group(0)) if match else 0
@@ -112,7 +108,6 @@ if uploaded_file:
 
         col_opt1, col_opt2 = st.columns(2)
         with col_opt1:
-            # Pilihan Metrik yang otomatis menyesuaikan apa saja yang diketik Papa di Excel
             pilihan = st.selectbox("🎯 Pilih Metrik Penjualan:", [c for c in df_final.columns if c not in ['Minggu', 'Produk']])
         with col_opt2:
             jenis_grafik = st.selectbox("📈 Pilih Bentuk Diagram:", ["Diagram Batang Berdampingan (Grouped Bar)", "Diagram Garis Tren (Line)", "Diagram Lingkaran (Pie)"])
