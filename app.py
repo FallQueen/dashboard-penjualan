@@ -14,6 +14,7 @@ st.set_page_config(
     initial_sidebar_state="expanded" 
 )
 
+# 2. CUSTOM CSS
 st.markdown("""
     <style>
     .stApp { background-color: #0E1117 !important; color: #FFFFFF !important; }
@@ -53,46 +54,36 @@ with st.sidebar:
 # --- LOGIKA DASHBOARD ---
 if uploaded_file:
     try:
-        # 1. BACA EXCEL APA ADANYA (Tanpa dipotong/dibuang barisnya agar koordinat aman)
         if uploaded_file.name.endswith('.csv'):
             df_raw = pd.read_csv(uploaded_file, header=None)
         else:
             df_raw = pd.read_excel(uploaded_file, sheet_name=selected_sheet, header=None)
 
-        # ✨ ALGORITMA SUPER FLEKSIBEL: "CELL-BY-CELL HARVESTER" ✨
+        # ✨ ALGORITMA "CELL-BY-CELL HARVESTER" ✨
         data_list = []
-        
-        # A. Cari baris dan kolom mana saja yang punya tulisan "Week" atau "W"
         anchor_rows = []
         for r in range(len(df_raw)):
             for c in range(len(df_raw.columns)):
                 val = str(df_raw.iloc[r, c]).strip()
                 if re.search(r'^(Week|Weeek|W)\s*\d+', val, re.IGNORECASE):
                     anchor_rows.append((r, c))
-                    break # Ketemu 1 di baris ini, langsung lanjut ke baris berikutnya
+                    break 
                     
         if not anchor_rows:
             st.error("Gagal mendeteksi data. Pastikan ada tulisan 'Week' atau 'W' di dalam tabel.")
             st.stop()
             
-        # B. Ekstrak data berdasarkan koordinat jangkar (Anchor)
         for i, (r, c) in enumerate(anchor_rows):
             metric_col = c - 1
-            if metric_col < 0: continue # Jaga-jaga kalau error format
-            
-            # Batas tabel ini adalah tabel berikutnya (atau akhir file)
+            if metric_col < 0: continue 
             end_r = anchor_rows[i+1][0] if i+1 < len(anchor_rows) else len(df_raw)
             
-            # Tarik baris Minggu dan Produk, ratakan sel yang di-merge (ffill)
             week_row = df_raw.iloc[r].copy()
             week_row = week_row.replace(['nan', 'NaN', 'None', ''], pd.NA).ffill()
             prod_row = df_raw.iloc[r+1].copy().fillna('')
             
-            # Panen angka per sel!
             for data_r in range(r+2, end_r):
                 metric_name = str(df_raw.iloc[data_r, metric_col]).strip()
-                
-                # Abaikan baris kalau nama metriknya kosong
                 if metric_name in ['nan', 'NaN', 'None', '', '0']: 
                     continue
                     
@@ -100,15 +91,12 @@ if uploaded_file:
                     week_val = str(week_row[data_c]).strip()
                     prod_val = str(prod_row[data_c]).strip()
                     
-                    # Cek apakah kolom ini benar-benar kolom "Week"
                     if not re.search(r'^(Week|Weeek|W)\s*\d+', week_val, re.IGNORECASE):
                         continue
                         
                     val = df_raw.iloc[data_r, data_c]
-                    
-                    # Simpan ke database internal
                     data_list.append({
-                        'Minggu': week_val,
+                        'MingguAsli': week_val, # Simpan teks aslinya (berisi tahun)
                         'Produk': prod_val,
                         'Metrik': metric_name,
                         'Nilai': val
@@ -118,32 +106,44 @@ if uploaded_file:
             st.error("Gagal memproses metrik. Format tidak sesuai.")
             st.stop()
 
-        # 2. RAKIT DATABASE JADI TABEL RAPI
         df_melted = pd.DataFrame(data_list)
         
-        # Bersihkan nama minggu ("W 06" jadi "Week 6")
-        def clean_week(s):
-            match = re.search(r'(?:Week|Weeek|W)\s*(\d+)', str(s), flags=re.IGNORECASE)
-            return f"Week {int(match.group(1))}" if match else str(s)
-        df_melted['Minggu'] = df_melted['Minggu'].apply(clean_week)
+        # ✨ ALGORITMA SENSOR TAHUN LINTAS TAHUN ✨
+        def parse_week_year(s):
+            s_str = str(s)
+            # Tarik Angka Minggu
+            w_match = re.search(r'(?:Week|Weeek|W)\s*(\d+)', s_str, flags=re.IGNORECASE)
+            w_num = int(w_match.group(1)) if w_match else 0
+            
+            # Tarik Angka Tahun (2025, 2026, dst)
+            y_match = re.search(r'(20\d{2})', s_str)
+            y_num = int(y_match.group(1)) if y_match else 2000 # Default jika tidak ditulis tahunnya
+            
+            # Percantik label sumbu X
+            label = f"Week {w_num} ({y_num})" if y_match else f"Week {w_num}"
+            return pd.Series([label, y_num, w_num])
+
+        df_melted[['Minggu', 'TahunNum', 'WeekNum']] = df_melted['MingguAsli'].apply(parse_week_year)
         
-        # Bersihkan angka dan isi kosong dengan 0
         def clean_numeric(val):
             if isinstance(val, str):
                 val = val.replace('%', '').replace(',', '').strip()
                 if val in ['#DIV/0!', '-', '']: 
                     return 0
             return pd.to_numeric(val, errors='coerce')
+            
         df_melted['Nilai'] = df_melted['Nilai'].apply(clean_numeric).fillna(0)
         
-        # 3. PIVOT (Buat tabel siap pakai untuk aplikasi)
-        df_final = df_melted.pivot_table(index=['Minggu', 'Produk'], columns='Metrik', values='Nilai', aggfunc='first').reset_index()
+        # PIVOT DENGAN INDEX TAHUN DAN MINGGU
+        df_final = df_melted.pivot_table(
+            index=['TahunNum', 'WeekNum', 'Minggu', 'Produk'], 
+            columns='Metrik', 
+            values='Nilai', 
+            aggfunc='first'
+        ).reset_index()
         
-        def get_week_num(w):
-            match = re.search(r'\d+', str(w))
-            return int(match.group(0)) if match else 0
-        df_final['WeekNum'] = df_final['Minggu'].apply(get_week_num)
-        df_final = df_final.sort_values(['WeekNum', 'Produk']).drop(columns=['WeekNum']).reset_index(drop=True)
+        # ✨ SORTING SAKTI: Urutkan Tahun dulu, baru Minggu!
+        df_final = df_final.sort_values(['TahunNum', 'WeekNum', 'Produk']).drop(columns=['TahunNum', 'WeekNum', 'MingguAsli'], errors='ignore').reset_index(drop=True)
 
         # --- UI DASHBOARD ---
         st.markdown(f"<h1 style='text-align: center; color: #60A5FA; font-size: 50px;'>📊 Laporan: {selected_sheet}</h1>", unsafe_allow_html=True)
