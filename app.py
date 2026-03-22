@@ -14,7 +14,6 @@ st.set_page_config(
     initial_sidebar_state="expanded" 
 )
 
-# 2. CUSTOM CSS
 st.markdown("""
     <style>
     .stApp { background-color: #0E1117 !important; color: #FFFFFF !important; }
@@ -36,7 +35,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- SIDEBAR (PANEL KONTROL) ---
+# --- SIDEBAR ---
 with st.sidebar:
     st.markdown("## 📥 Panel Kontrol")
     uploaded_file = st.file_uploader("Upload File Laporan", type=['xlsx', 'csv', 'xls'])
@@ -54,91 +53,90 @@ with st.sidebar:
 # --- LOGIKA DASHBOARD ---
 if uploaded_file:
     try:
+        # 1. BACA EXCEL APA ADANYA (Tanpa dipotong/dibuang barisnya agar koordinat aman)
         if uploaded_file.name.endswith('.csv'):
             df_raw = pd.read_csv(uploaded_file, header=None)
         else:
             df_raw = pd.read_excel(uploaded_file, sheet_name=selected_sheet, header=None)
 
-        df_raw = df_raw.dropna(how='all', axis=0).dropna(how='all', axis=1).reset_index(drop=True)
+        # ✨ ALGORITMA SUPER FLEKSIBEL: "CELL-BY-CELL HARVESTER" ✨
+        data_list = []
         
-        # ✨ RADAR SCANNER MULTI-BLOK (Mendeteksi semua tabel yang ditumpuk)
-        header_indices = []
-        for i in range(len(df_raw)):
-            row_str = ' '.join(df_raw.iloc[i].astype(str).fillna(''))
-            if re.search(r'(Week|Weeek|W\s*\d+)', row_str, re.IGNORECASE):
-                header_indices.append(i)
-                
-        if not header_indices:
+        # A. Cari baris dan kolom mana saja yang punya tulisan "Week" atau "W"
+        anchor_rows = []
+        for r in range(len(df_raw)):
+            for c in range(len(df_raw.columns)):
+                val = str(df_raw.iloc[r, c]).strip()
+                if re.search(r'^(Week|Weeek|W)\s*\d+', val, re.IGNORECASE):
+                    anchor_rows.append((r, c))
+                    break # Ketemu 1 di baris ini, langsung lanjut ke baris berikutnya
+                    
+        if not anchor_rows:
             st.error("Gagal mendeteksi data. Pastikan ada tulisan 'Week' atau 'W' di dalam tabel.")
             st.stop()
             
-        all_melted_blocks = []
-        
-        # Loop membedah setiap tabel yang ditemukan
-        for idx_pos, h_idx in enumerate(header_indices):
-            # Batas akhir tabel ini adalah judul tabel berikutnya, atau akhir dokumen
-            end_idx = header_indices[idx_pos + 1] if idx_pos + 1 < len(header_indices) else len(df_raw)
+        # B. Ekstrak data berdasarkan koordinat jangkar (Anchor)
+        for i, (r, c) in enumerate(anchor_rows):
+            metric_col = c - 1
+            if metric_col < 0: continue # Jaga-jaga kalau error format
             
-            # Cari kolom awal (Week)
-            first_data_col_idx = -1
-            for col_idx, val in enumerate(df_raw.iloc[h_idx]):
-                if pd.notna(val) and re.search(r'(Week|Weeek|W\s*\d+)', str(val), re.IGNORECASE):
-                    first_data_col_idx = col_idx
-                    break
-                    
-            if first_data_col_idx == -1:
-                continue
+            # Batas tabel ini adalah tabel berikutnya (atau akhir file)
+            end_r = anchor_rows[i+1][0] if i+1 < len(anchor_rows) else len(df_raw)
+            
+            # Tarik baris Minggu dan Produk, ratakan sel yang di-merge (ffill)
+            week_row = df_raw.iloc[r].copy()
+            week_row = week_row.replace(['nan', 'NaN', 'None', ''], pd.NA).ffill()
+            prod_row = df_raw.iloc[r+1].copy().fillna('')
+            
+            # Panen angka per sel!
+            for data_r in range(r+2, end_r):
+                metric_name = str(df_raw.iloc[data_r, metric_col]).strip()
                 
-            metric_col_idx = first_data_col_idx - 1
-            if metric_col_idx < 0: metric_col_idx = 0
-
-            # Ekstrak header minggu & produk untuk blok ini
-            df_raw.iloc[h_idx] = df_raw.iloc[h_idx].astype(str).str.replace('Weeek', 'Week', regex=False)
-            weeks = df_raw.iloc[h_idx, first_data_col_idx:].replace(['nan', 'NaN', 'None', ''], pd.NA).ffill()
-            prods = df_raw.iloc[h_idx + 1, first_data_col_idx:].replace(['nan', 'NaN', 'None', ''], '')
-            
-            w_list = [str(w).replace('nan','').strip() for w in weeks]
-            p_list = [str(p).replace('nan','').strip() for p in prods]
-            kategori = [f"{w} ||| {p}" for w, p in zip(w_list, p_list)]
-            
-            # Ekstrak data
-            df_temp = pd.DataFrame(df_raw.iloc[h_idx + 2 : end_idx, first_data_col_idx:].values, columns=kategori)
-            df_temp['Metrik'] = df_raw.iloc[h_idx + 2 : end_idx, metric_col_idx].values
-            
-            # Saring data kotor
-            df_temp = df_temp[df_temp['Metrik'].notna() & (df_temp['Metrik'].astype(str).str.strip() != '')]
-            df_temp = df_temp[~df_temp['Metrik'].astype(str).str.contains(r'(Week|Weeek|W\s*\d+)', flags=re.IGNORECASE)]
-            df_temp = df_temp.reset_index(drop=True)
-            
-            if not df_temp.empty:
-                df_m = df_temp.melt(id_vars=['Metrik'], var_name='Kategori', value_name='Nilai')
-                df_m[['Minggu', 'Produk']] = df_m['Kategori'].str.split(' \|\|\| ', expand=True)
-                all_melted_blocks.append(df_m)
-
-        if not all_melted_blocks:
+                # Abaikan baris kalau nama metriknya kosong
+                if metric_name in ['nan', 'NaN', 'None', '', '0']: 
+                    continue
+                    
+                for data_c in range(c, len(df_raw.columns)):
+                    week_val = str(week_row[data_c]).strip()
+                    prod_val = str(prod_row[data_c]).strip()
+                    
+                    # Cek apakah kolom ini benar-benar kolom "Week"
+                    if not re.search(r'^(Week|Weeek|W)\s*\d+', week_val, re.IGNORECASE):
+                        continue
+                        
+                    val = df_raw.iloc[data_r, data_c]
+                    
+                    # Simpan ke database internal
+                    data_list.append({
+                        'Minggu': week_val,
+                        'Produk': prod_val,
+                        'Metrik': metric_name,
+                        'Nilai': val
+                    })
+                    
+        if not data_list:
             st.error("Gagal memproses metrik. Format tidak sesuai.")
             st.stop()
 
-        # 🔗 SATUKAN SEMUA BLOK TABEL
-        df_melted = pd.concat(all_melted_blocks, ignore_index=True)
+        # 2. RAKIT DATABASE JADI TABEL RAPI
+        df_melted = pd.DataFrame(data_list)
         
-        # Bersihkan nama minggu (Misal "W 06" jadi "Week 6")
+        # Bersihkan nama minggu ("W 06" jadi "Week 6")
         def clean_week(s):
             match = re.search(r'(?:Week|Weeek|W)\s*(\d+)', str(s), flags=re.IGNORECASE)
             return f"Week {int(match.group(1))}" if match else str(s)
         df_melted['Minggu'] = df_melted['Minggu'].apply(clean_week)
         
-        # Bersihkan angka dan isi yang kosong dengan 0
+        # Bersihkan angka dan isi kosong dengan 0
         def clean_numeric(val):
             if isinstance(val, str):
                 val = val.replace('%', '').replace(',', '').strip()
                 if val in ['#DIV/0!', '-', '']: 
                     return 0
             return pd.to_numeric(val, errors='coerce')
-            
         df_melted['Nilai'] = df_melted['Nilai'].apply(clean_numeric).fillna(0)
         
-        # PIVOT FINAL
+        # 3. PIVOT (Buat tabel siap pakai untuk aplikasi)
         df_final = df_melted.pivot_table(index=['Minggu', 'Produk'], columns='Metrik', values='Nilai', aggfunc='first').reset_index()
         
         def get_week_num(w):
@@ -237,8 +235,9 @@ if uploaded_file:
                 st.error(f"Gagal membuat PDF. Detail error: {e}")
 
     except Exception as e:
-        st.error(f"Gagal membaca format tabel. Error detail: {e}")
+        st.error(f"Terjadi kesalahan sistem: {e}. Pastikan file Excel sesuai standar.")
 
+# --- TAMPILAN AWAL SEBELUM UPLOAD ---
 else:
     st.markdown("""
         <div class="header-stack">
